@@ -2,8 +2,11 @@
 #include <iostream>
 #include <vector>
 
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include <csignal>
 #include <cstdlib>
+#include <ctime>
 
 #include <termios.h>
 #include <unistd.h>
@@ -62,10 +65,10 @@ void draw()
     auto center_x = width / 2;
     auto center_y = height / 2;
 
-    const unsigned int thickness = 2;
-    auto radius = std::min(width, height) / 2 - thickness;
-    auto inner_ring2 = (radius - thickness)*(radius - thickness);
-    auto outer_ring2 = (radius + thickness)*(radius + thickness);
+    const unsigned int ring_thickness = 2;
+    auto radius = std::min(width, height) / 2 - ring_thickness;
+    auto inner_ring2 = (radius - ring_thickness)*(radius - ring_thickness);
+    auto outer_ring2 = (radius + ring_thickness)*(radius + ring_thickness);
 
     // draw outer ring
     for(auto row = 0; row < height; ++row)
@@ -79,7 +82,31 @@ void draw()
         }
     }
 
+    auto now = std::time(nullptr);
+    auto clock = std::localtime(&now);
+
+    auto hour = clock->tm_hour % 12; // we just need an angle, so no worries about am/pm/noon/midnight 0-11 is perfect
+    auto min  = clock->tm_min;
+    auto sec  = clock->tm_sec;
+
+    auto hour_angle = M_PI / 180.0f * (hour * 30.0f + min / 10.0f + sec / 600.0f);
+    auto min_angle  = M_PI / 180.0f * (min  *  6.0f + sec / 10.0f);
+    auto sec_angle  = M_PI / 180.0f * (sec  *  6.0f);
+
+    auto hour_len = radius * 0.50f;
+    auto min_len  = radius * 0.75f;
+    auto sec_len  = radius * 0.90f;
+
+    auto hour_x = std::sin(hour_angle) *  hour_len + center_x;
+    auto hour_y = std::cos(hour_angle) * -hour_len + center_y;
+    auto min_x  = std::sin(min_angle)  *  min_len  + center_x;
+    auto min_y  = std::cos(min_angle)  * -min_len  + center_y;
+    auto sec_x  = std::sin(sec_angle)  *  sec_len  + center_x;
+    auto sec_y  = std::cos(sec_angle)  * -sec_len  + center_y;
+
+    // render to terminal
     std::cout<<CLS;
+    // std::cout<<hour_angle<<','<<min_angle<<','<<sec_angle<<'\n';
 
     for(auto row = 0; row < height; row += 4)
     {
@@ -101,8 +128,14 @@ void draw()
 
             std::cout<<disp[cell];
         }
-        std::cout<<'\n';
+
+        if(row + 1 < height)
+            std::cout<<'\n';
     }
+
+    std::cout<<CSI<<int(hour_y / 4.0) + 1<<';'<<int(hour_x / 2.0) + 1<<'H'<<"H";
+    std::cout<<CSI<<int(min_y / 4.0) + 1<<';'<<int(min_x / 2.0) + 1<<'H'<<"M";
+    std::cout<<CSI<<int(sec_y / 4.0) + 1<<';'<<int(sec_x / 2.0) + 1<<'H'<<"S";
 
     std::cout.flush();
     term_info.resized = false;
@@ -126,9 +159,10 @@ int main(int argc, char * argv[])
     while(true)
     {
         draw();
-        int c = std::cin.get();
-        if(c == 'q' || c == 'Q')
-            break;
+        sleep(1);
+        // int c = std::cin.get();
+        // if(c == 'q' || c == 'Q')
+        //     break;
     }
 
     return 0;
