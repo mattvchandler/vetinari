@@ -173,6 +173,18 @@ void draw()
         }
     }
 
+    // draw hour markers
+    for(int i = 0; i < 12; ++i)
+    {
+        auto angle = M_PI / 6.0f * i;
+        draw_line(img, center_x + std::sin(angle) * radius * 0.8f,
+                       center_y - std::cos(angle) * radius * 0.8f,
+                       center_x + std::sin(angle) * radius,
+                       center_y - std::cos(angle) * radius,
+                       ring_thickness * 1.5f);
+    }
+
+    // draw hands
     auto now = std::time(nullptr);
     auto clock = std::localtime(&now);
 
