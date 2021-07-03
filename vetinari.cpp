@@ -50,6 +50,97 @@ void resize(int)
     draw(); // TODO remove
 }
 
+void draw_line(std::vector<std::vector<unsigned char>> & img, int start_x, int start_y, int end_x, int end_y, float wt)
+{
+    auto draw = [&img](int x, int y)
+    {
+        if(y >= 0 && y < static_cast<int>(std::size(img)) && x >= 0 && x < static_cast<int>(std::size(img[y])))
+            img[y][x] = 1;
+    };
+
+    if(start_x == end_x)
+    {
+        if(start_y > end_y)
+            std::swap(start_y, end_y);
+
+        for(int y = start_y; y <= end_y; ++y)
+        {
+            for(int x = start_x - static_cast<int>(std::floor(wt / 2.0f)); x < start_x + static_cast<int>(std::ceil(wt / 2.0f)); ++x)
+            {
+                draw(x, y);
+            }
+        }
+        return;
+    }
+    else if(start_y == end_y)
+    {
+        if(start_x > end_x)
+            std::swap(start_x, end_x);
+
+        for(int x = start_x; x <= end_x; ++x)
+        {
+            for(int y = start_y - static_cast<int>(std::floor(wt / 2.0f)); y < start_y + static_cast<int>(std::ceil(wt / 2.0f)); ++y)
+            {
+                draw(x, y);
+            }
+        }
+        return;
+    }
+
+    // modified Bresenham algorithm
+    auto draw_x = start_x, draw_y = start_y;
+
+    int dx = std::abs(end_x - draw_x);
+    int dy = std::abs(end_y - draw_y);
+    int sx = draw_x < end_x ? 1 : -1;
+    int sy = draw_y < end_y ? 1 : -1;
+
+    int err = dx - dy; // error value e_xy
+    float ed = dx + dy == 0 ? 1.0f
+                            : std::sqrt(static_cast<float>(dx) * static_cast<float>(dx)
+                                      + static_cast<float>(dy) * static_cast<float>(dy));
+
+    float wd = wt / 2.0f;
+    while(true)
+    {
+        draw(draw_x, draw_y);
+
+        int e2 = err;
+        int x2 = draw_x;
+        int y2 = draw_y;
+
+        if(e2 * 2 >= -dx)  // x step
+        {
+            e2 += dy;
+            while(static_cast<float>(e2) < ed * wd && (end_y != y2 || dx > dy))
+            {
+                y2 += sy;
+                draw(draw_x, y2);
+                e2 += dx;
+            }
+            if(draw_x == end_x)
+                break;
+            e2 = err;
+            err -= dy;
+            draw_x += sx;
+        }
+        if(e2 * 2 <= dy)  // y step
+        {
+            e2 = dx - e2;
+            while(static_cast<float>(e2) < ed * wd && (end_x != x2 || dx < dy))
+            {
+                x2 += sx;
+                draw(x2, draw_y);
+                e2 += dy;
+            }
+            if(draw_y == end_y)
+                break;
+            err += dx;
+            draw_y += sy;
+        }
+    }
+}
+
 void draw()
 {
     // we have a cols x rows grid of chars
@@ -104,9 +195,12 @@ void draw()
     auto sec_x  = std::sin(sec_angle)  *  sec_len  + center_x;
     auto sec_y  = std::cos(sec_angle)  * -sec_len  + center_y;
 
+    draw_line(img, center_x, center_y, hour_x, hour_y, 4.0f);
+    draw_line(img, center_x, center_y, min_x,  min_y,  3.0f);
+    draw_line(img, center_x, center_y, sec_x,  sec_y,  2.0f);
+
     // render to terminal
     std::cout<<CLS;
-    // std::cout<<hour_angle<<','<<min_angle<<','<<sec_angle<<'\n';
 
     for(auto row = 0; row < height; row += 4)
     {
@@ -132,10 +226,6 @@ void draw()
         if(row + 1 < height)
             std::cout<<'\n';
     }
-
-    std::cout<<CSI<<int(hour_y / 4.0) + 1<<';'<<int(hour_x / 2.0) + 1<<'H'<<"H";
-    std::cout<<CSI<<int(min_y / 4.0) + 1<<';'<<int(min_x / 2.0) + 1<<'H'<<"M";
-    std::cout<<CSI<<int(sec_y / 4.0) + 1<<';'<<int(sec_x / 2.0) + 1<<'H'<<"S";
 
     std::cout.flush();
     term_info.resized = false;
