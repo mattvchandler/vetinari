@@ -17,6 +17,8 @@
 #ifdef PULSEAUDIO_FOUND
 #include <pulse/simple.h>
 #include <pulse/error.h>
+#include "tick.h"
+#include "tock.h"
 #endif
 
 #define ESC "\x1B"
@@ -259,6 +261,60 @@ void draw()
     term_info.resized = false;
 }
 
+#ifdef PULSEAUDIO_FOUND
+class Audio
+{
+public:
+    Audio(): pa {pa_simple_new(
+                    nullptr,            // Use the default server.
+                    "vetinari clock",   // Our application's name.
+                    PA_STREAM_PLAYBACK,
+                    nullptr,            // Use the default device.
+                    "tick-tock",        // Description of our stream.
+                    &spec,              // Our sample format.
+                    nullptr,            // Use default channel map
+                    nullptr,            // Use default buffering attributes.
+                    nullptr             // Ignore error code.
+                    )}
+    {}
+
+    ~Audio()
+    {
+        if(pa)
+        {
+            pa_simple_free(pa);
+        }
+    }
+
+    void tick() { play(tick_pcm, tick_pcm_len); }
+    void tock() { play(tock_pcm, tock_pcm_len); }
+
+private:
+    pa_sample_spec spec
+    {
+        .format = PA_SAMPLE_S16LE,
+        .rate = 8000,
+        .channels = 1
+    };
+    pa_simple * pa {nullptr};
+
+    void play(const unsigned char * pcm, unsigned int pcm_len)
+    {
+        if(pa)
+        {
+            pa_simple_write(pa, pcm, pcm_len, nullptr);
+            pa_simple_drain(pa, nullptr);
+        }
+    }
+};
+#else
+class Audio
+{
+    void tick() {}
+    void tock() {}
+};
+#endif
+
 int main(int argc, char * argv[])
 {
     std::atexit(cleanup);
@@ -275,12 +331,23 @@ int main(int argc, char * argv[])
     resize(0);
 
     std::default_random_engine rnd_eng{std::random_device{}()};
-    std::bernoulli_distribution wrong_tick {0.25f}; // probability of wrong_tick
+    std::bernoulli_distribution wrong_tick {0.1f}; // probability of wrong_tick
+    std::bernoulli_distribution skip_tock {0.1f}; // probability of tick-tick or tock-tock vs tick-tock
     std::normal_distribution tick_mod {1.0f, 0.75f}; // random tick length
+
+    Audio audio;
+    bool ticktock = true;
 
     while(true)
     {
         draw();
+
+        if(ticktock)
+            audio.tick();
+        else
+            audio.tock();
+        if(!skip_tock(rnd_eng))
+            ticktock = !ticktock;
 
         auto tick_length = std::chrono::duration<float>{
             wrong_tick(rnd_eng) ? std::max(0.0f, tick_mod(rnd_eng)) : 1.0f};
