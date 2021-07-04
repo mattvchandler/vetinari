@@ -54,17 +54,6 @@ void cleanup_exit(int)
     std::exit(1);
 }
 
-void draw(); // TODO remove?
-void resize(int)
-{
-    winsize ws;
-    ioctl(1, TIOCGWINSZ, &ws);
-    term_info.rows = ws.ws_row;
-    term_info.cols = ws.ws_col;
-    term_info.resized = true;
-    draw(); // TODO remove
-}
-
 void draw_line(std::vector<std::vector<unsigned char>> & img, int start_x, int start_y, int end_x, int end_y, float wt)
 {
     auto draw = [&img](int x, int y)
@@ -259,6 +248,16 @@ void draw()
 
     std::cout.flush();
     term_info.resized = false;
+}
+
+void resize(int)
+{
+    winsize ws;
+    ioctl(1, TIOCGWINSZ, &ws);
+    term_info.rows = ws.ws_row;
+    term_info.cols = ws.ws_col;
+    term_info.resized = true;
+    draw();
 }
 
 #ifdef PULSEAUDIO_FOUND
