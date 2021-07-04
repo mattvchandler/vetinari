@@ -22,6 +22,11 @@
 #define CURSOR CSI "?25"
 #define CLS CSI "2J"
 
+void move_cusor(int row, int col)
+{
+    std::cout << CSI << row + 1 << ';' << col + 1 << 'H';
+}
+
 static struct
 {
     unsigned short rows = 0, cols = 0;
@@ -153,24 +158,24 @@ void draw()
 
     int width  = term_info.cols * 2;
     int height = term_info.rows * 4;
+    auto square = std::min(width, height);
 
-    auto img = std::vector(height, std::vector<unsigned char>(width, 0));
+    auto img = std::vector(square, std::vector<unsigned char>(square, 0));
 
-    auto center_x = width / 2;
-    auto center_y = height / 2;
+    auto center = square / 2;
 
     const unsigned int ring_thickness = 2;
-    auto radius = std::min(width, height) / 2 - ring_thickness;
+    auto radius = square / 2 - ring_thickness;
     auto inner_ring2 = (radius - ring_thickness)*(radius - ring_thickness);
     auto outer_ring2 = (radius + ring_thickness)*(radius + ring_thickness);
 
     // draw outer ring
-    for(auto row = 0; row < height; ++row)
+    for(auto row = 0; row < square; ++row)
     {
-        for(auto col = 0; col < width; ++col)
+        for(auto col = 0; col < square; ++col)
         {
-            int y = center_y - row;
-            int x = center_x - col;
+            int y = center - row;
+            int x = center - col;
             auto r2 = x*x + y*y;
             img[row][col] = r2 >= inner_ring2 && r2 < outer_ring2;
         }
@@ -180,10 +185,10 @@ void draw()
     for(int i = 0; i < 12; ++i)
     {
         auto angle = M_PI / 6.0f * i;
-        draw_line(img, center_x + std::sin(angle) * radius * 0.8f,
-                       center_y - std::cos(angle) * radius * 0.8f,
-                       center_x + std::sin(angle) * radius,
-                       center_y - std::cos(angle) * radius,
+        draw_line(img, center + std::sin(angle) * radius * 0.8f,
+                       center - std::cos(angle) * radius * 0.8f,
+                       center + std::sin(angle) * radius,
+                       center - std::cos(angle) * radius,
                        ring_thickness * 1.5f);
     }
 
@@ -203,23 +208,24 @@ void draw()
     auto min_len  = radius * 0.75f;
     auto sec_len  = radius * 0.90f;
 
-    auto hour_x = std::sin(hour_angle) *  hour_len + center_x;
-    auto hour_y = std::cos(hour_angle) * -hour_len + center_y;
-    auto min_x  = std::sin(min_angle)  *  min_len  + center_x;
-    auto min_y  = std::cos(min_angle)  * -min_len  + center_y;
-    auto sec_x  = std::sin(sec_angle)  *  sec_len  + center_x;
-    auto sec_y  = std::cos(sec_angle)  * -sec_len  + center_y;
+    auto hour_x = std::sin(hour_angle) *  hour_len + center;
+    auto hour_y = std::cos(hour_angle) * -hour_len + center;
+    auto min_x  = std::sin(min_angle)  *  min_len  + center;
+    auto min_y  = std::cos(min_angle)  * -min_len  + center;
+    auto sec_x  = std::sin(sec_angle)  *  sec_len  + center;
+    auto sec_y  = std::cos(sec_angle)  * -sec_len  + center;
 
-    draw_line(img, center_x, center_y, hour_x, hour_y, 4.0f);
-    draw_line(img, center_x, center_y, min_x,  min_y,  3.0f);
-    draw_line(img, center_x, center_y, sec_x,  sec_y,  2.0f);
+    draw_line(img, center, center, hour_x, hour_y, 4.0f);
+    draw_line(img, center, center, min_x,  min_y,  3.0f);
+    draw_line(img, center, center, sec_x,  sec_y,  2.0f);
 
     // render to terminal
     std::cout<<CLS;
 
-    for(auto row = 0; row < height; row += 4)
+    for(auto row = 0; row < square; row += 4)
     {
-        for(auto col = 0; col < width; col += 2)
+        move_cusor(row / 4 + (height - square) / 8, (width - square) / 4);
+        for(auto col = 0; col < square; col += 2)
         {
             auto cell =
                 img[row    ][col    ] << 3 |
@@ -242,9 +248,6 @@ void draw()
 
             std::cout<<disp[cell];
         }
-
-        if(row + 1 < height)
-            std::cout<<'\n';
     }
 
     std::cout.flush();
