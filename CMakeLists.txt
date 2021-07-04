@@ -17,4 +17,13 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release")
 endif()
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PULSEAUDIO libpulse-simple)
+
 add_executable(vetinari vetinari.cpp)
+
+if(PULSEAUDIO_FOUND)
+    target_compile_definitions(vetinari PRIVATE "-DPULSEAUDIO_FOUND")
+    target_include_directories(vetinari PRIVATE ${PULSEAUDIO_INCLUDE_DIRS})
+    target_link_libraries(vetinari ${PULSEAUDIO_LIBRARIES})
+endif()

@@ -14,6 +14,11 @@
 #include <termios.h>
 #include <unistd.h>
 
+#ifdef PULSEAUDIO_FOUND
+#include <pulse/simple.h>
+#include <pulse/error.h>
+#endif
+
 #define ESC "\x1B"
 #define CSI ESC "["
 #define ENABLED "h"
