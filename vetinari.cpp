@@ -1,5 +1,8 @@
 #include <array>
+#include <chrono>
 #include <iostream>
+#include <random>
+#include <thread>
 #include <vector>
 
 #define _USE_MATH_DEFINES
@@ -224,13 +227,18 @@ void draw()
                 img[row + 1][col    ] << 1 |
                 img[row + 1][col + 1];
 
-            static const std::array<std::string, 16> disp
-            {
+            static const std::array<std::string, 16> disp {
                 " ", "▗", "▖", "▄",
                 "▝", "▐", "▞", "▟",
                 "▘", "▚", "▌", "▙",
                 "▀", "▜", "▛", "█"
             };
+            // static const std::array<std::string, 16> disp {
+            //     " ", ".", ",", "_",
+            //     "'", "]", "/", "d",
+            //     "`", "\\", "[", "L",
+            //     "-", "7", "P", "M"
+            // };
 
             std::cout<<disp[cell];
         }
@@ -258,13 +266,18 @@ int main(int argc, char * argv[])
 
     resize(0);
 
+    std::default_random_engine rnd_eng{std::random_device{}()};
+    std::bernoulli_distribution wrong_tick {0.25f}; // probability of wrong_tick
+    std::normal_distribution tick_mod {1.0f, 0.75f}; // random tick length
+
     while(true)
     {
         draw();
-        sleep(1);
-        // int c = std::cin.get();
-        // if(c == 'q' || c == 'Q')
-        //     break;
+
+        auto tick_length = std::chrono::duration<float>{
+            wrong_tick(rnd_eng) ? std::max(0.0f, tick_mod(rnd_eng)) : 1.0f};
+
+        std::this_thread::sleep_for(tick_length);
     }
 
     return 0;
