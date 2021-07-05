@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <ctime>
 
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -159,7 +160,7 @@ void draw()
 
     auto center = square / 2;
 
-    const unsigned int ring_thickness = 2;
+    const int ring_thickness = 2;
     auto radius = square / 2 - ring_thickness;
     auto inner_ring2 = (radius - ring_thickness)*(radius - ring_thickness);
     auto outer_ring2 = (radius + ring_thickness)*(radius + ring_thickness);
@@ -265,7 +266,7 @@ class Audio
 public:
     Audio(): pa {pa_simple_new(
                     nullptr,            // Use the default server.
-                    "vetinari clock",   // Our application's name.
+                    "Vetinari clock",   // Our application's name.
                     PA_STREAM_PLAYBACK,
                     nullptr,            // Use the default device.
                     "tick-tock",        // Description of our stream.
