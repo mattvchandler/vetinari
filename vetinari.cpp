@@ -17,8 +17,7 @@
 #ifdef PULSEAUDIO_FOUND
 #include <pulse/simple.h>
 #include <pulse/error.h>
-#include "tick.h"
-#include "tock.h"
+#include "ticktock.h"
 #endif
 
 #define ESC "\x1B"
