@@ -309,6 +309,7 @@ private:
 #else
 class Audio
 {
+public:
     void tick() {}
     void tock() {}
 };
