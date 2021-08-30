@@ -41,19 +41,6 @@ static struct
     bool resized = true;
 } term_info;
 
-void cleanup()
-{
-    std::cout<<ALT_BUFF ENABLED<<std::flush;
-    std::cout<<CLS ALT_BUFF DISABLED CURSOR ENABLED<<std::flush;
-    tcsetattr(STDIN_FILENO, TCSANOW, &term_info.t);
-}
-
-void cleanup_exit(int)
-{
-    cleanup();
-    std::exit(1);
-}
-
 void draw_line(std::vector<std::vector<unsigned char>> & img, int start_x, int start_y, int end_x, int end_y, float wt)
 {
     auto draw = [&img](int x, int y)
@@ -260,6 +247,45 @@ void resize(int)
     draw();
 }
 
+void set_terminal()
+{
+    std::cout<<ALT_BUFF ENABLED CLS CURSOR DISABLED<<std::flush;
+    tcgetattr(STDIN_FILENO, &term_info.t); // save old term attrs
+    auto newt = term_info.t;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+    resize(0);
+}
+void cleanup()
+{
+    std::cout<<ALT_BUFF ENABLED<<std::flush;
+    std::cout<<CLS ALT_BUFF DISABLED CURSOR ENABLED<<std::flush;
+    tcsetattr(STDIN_FILENO, TCSANOW, &term_info.t);
+}
+
+void cleanup_exit(int)
+{
+    cleanup();
+    std::exit(1);
+}
+
+void suspend(int)
+{
+    cleanup();
+
+    // crazy song and dance to run the default suspend handler and then restore our own on continue
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGTSTP);
+    sigprocmask(SIG_UNBLOCK, &mask, nullptr);
+    signal(SIGTSTP, SIG_DFL);
+    kill(getpid(), SIGTSTP);
+    signal(SIGTSTP, suspend);
+
+    set_terminal();
+}
+
 #ifdef PULSEAUDIO_FOUND
 class Audio
 {
@@ -321,14 +347,9 @@ int main(int argc, char * argv[])
     std::signal(SIGINT, cleanup_exit);
     std::signal(SIGTERM, cleanup_exit);
     std::signal(SIGWINCH, resize);
+    std::signal(SIGTSTP, suspend);
 
-    std::cout<<ALT_BUFF ENABLED CLS CURSOR DISABLED<<std::flush;
-    tcgetattr(STDIN_FILENO, &term_info.t); // save old term attrs
-    auto newt = term_info.t;
-    newt.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-    resize(0);
+    set_terminal();
 
     std::default_random_engine rnd_eng{std::random_device{}()};
     std::bernoulli_distribution wrong_tick {0.1f}; // probability of wrong_tick
