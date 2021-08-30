@@ -6,12 +6,14 @@
 #include <vector>
 
 #define _USE_MATH_DEFINES
+#include <cerrno>
 #include <cmath>
-#include <csignal>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 
 #include <sys/ioctl.h>
+#include <signal.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -33,13 +35,6 @@ void move_cusor(int row, int col)
 {
     std::cout << CSI << row + 1 << ';' << col + 1 << 'H';
 }
-
-static struct
-{
-    unsigned short rows = 0, cols = 0;
-    termios t;
-    bool resized = true;
-} term_info;
 
 void draw_line(std::vector<std::vector<unsigned char>> & img, int start_x, int start_y, int end_x, int end_y, float wt)
 {
@@ -131,6 +126,13 @@ void draw_line(std::vector<std::vector<unsigned char>> & img, int start_x, int s
         }
     }
 }
+
+static struct
+{
+    unsigned short rows = 0, cols = 0;
+    termios t;
+    bool resized = true;
+} term_info;
 
 void draw()
 {
@@ -237,55 +239,6 @@ void draw()
     term_info.resized = false;
 }
 
-void resize(int)
-{
-    winsize ws;
-    ioctl(1, TIOCGWINSZ, &ws);
-    term_info.rows = ws.ws_row;
-    term_info.cols = ws.ws_col;
-    term_info.resized = true;
-    draw();
-}
-
-void set_terminal()
-{
-    std::cout<<ALT_BUFF ENABLED CLS CURSOR DISABLED<<std::flush;
-    tcgetattr(STDIN_FILENO, &term_info.t); // save old term attrs
-    auto newt = term_info.t;
-    newt.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-    resize(0);
-}
-void cleanup()
-{
-    std::cout<<ALT_BUFF ENABLED<<std::flush;
-    std::cout<<CLS ALT_BUFF DISABLED CURSOR ENABLED<<std::flush;
-    tcsetattr(STDIN_FILENO, TCSANOW, &term_info.t);
-}
-
-void cleanup_exit(int)
-{
-    cleanup();
-    std::exit(1);
-}
-
-void suspend(int)
-{
-    cleanup();
-
-    // crazy song and dance to run the default suspend handler and then restore our own on continue
-    sigset_t mask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGTSTP);
-    sigprocmask(SIG_UNBLOCK, &mask, nullptr);
-    signal(SIGTSTP, SIG_DFL);
-    kill(getpid(), SIGTSTP);
-    signal(SIGTSTP, suspend);
-
-    set_terminal();
-}
-
 #ifdef PULSEAUDIO_FOUND
 class Audio
 {
@@ -341,13 +294,113 @@ public:
 };
 #endif
 
+void resize(int)
+{
+    winsize ws;
+    ioctl(1, TIOCGWINSZ, &ws);
+    term_info.rows = ws.ws_row;
+    term_info.cols = ws.ws_col;
+    term_info.resized = true;
+    draw(); // TODO: not safe
+}
+
+void set_terminal()
+{
+    std::cout<<ALT_BUFF ENABLED CLS CURSOR DISABLED<<std::flush;
+    tcgetattr(STDIN_FILENO, &term_info.t); // save old term attrs
+    auto newt = term_info.t;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+    resize(0);
+}
+void cleanup()
+{
+    std::cout<<ALT_BUFF ENABLED<<std::flush;
+    std::cout<<CLS ALT_BUFF DISABLED CURSOR ENABLED<<std::flush;
+    tcsetattr(STDIN_FILENO, TCSANOW, &term_info.t);
+}
+
+void cleanup_exit(int)
+{
+    cleanup(); // TODO: not safe
+    std::exit(1);
+}
+
+void suspend(int)
+{
+    cleanup(); // TODO: not safe
+
+    // set default SIGTSTP handlerer
+    if(signal(SIGTSTP, SIG_DFL) == SIG_ERR)
+        std::exit(1);
+
+    // unblock SIGTSTP so we can raise it again with the default handler
+    raise(SIGTSTP);
+    sigset_t save_mask, mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGTSTP);
+    if(sigprocmask(SIG_UNBLOCK, &mask, &save_mask) == -1)
+        std::exit(1);
+
+    // suspend, will continue here on resume
+
+    if(sigprocmask(SIG_SETMASK, &save_mask, nullptr) == -1)
+        std::exit(1);
+
+    struct sigaction action{};
+    sigemptyset(&action.sa_mask);
+    action.sa_flags |= SA_RESTART;
+    action.sa_handler = suspend;
+
+    if(sigaction(SIGTSTP, &action, nullptr) == -1)
+        std::exit(1);
+
+    set_terminal(); // TODO: not safe
+}
+
+void set_signal(int sig, void(*handler)(int))
+{
+    std::string sigstr;
+    #define CASESTR(x) case x: sigstr = #x; break;
+    switch(sig)
+    {
+        CASESTR(SIGINT)
+        CASESTR(SIGTERM)
+        CASESTR(SIGWINCH)
+        CASESTR(SIGTSTP)
+        default: sigstr = std::to_string(sig); break;
+    }
+    #undef CASESTR
+    struct sigaction action{};
+    if(sigaction(sig, nullptr, &action) == -1)
+    {
+        std::cerr<<"Warning - could not get signal "<< sigstr <<": "<<std::strerror(errno)<<'\n';
+        return;
+    }
+    if(!(action.sa_flags & SA_SIGINFO) && action.sa_handler == SIG_IGN)
+    {
+        std::cerr<<"Warning - signal "<< sigstr <<" is ignored\n";
+        return;
+    }
+    sigemptyset(&action.sa_mask);
+    action.sa_flags &= ~SA_SIGINFO;
+    action.sa_flags |= SA_RESTART;
+    action.sa_handler = handler;
+    if(sigaction(sig, &action, nullptr) == -1)
+    {
+        std::cerr<<"Warning - could not set signal "<< sigstr <<": "<<std::strerror(errno)<<'\n';
+        return;
+    }
+}
+
 int main(int argc, char * argv[])
 {
     std::atexit(cleanup);
-    std::signal(SIGINT, cleanup_exit);
-    std::signal(SIGTERM, cleanup_exit);
-    std::signal(SIGWINCH, resize);
-    std::signal(SIGTSTP, suspend);
+    set_signal(SIGINT, cleanup_exit);
+    set_signal(SIGTERM, cleanup_exit);
+    set_signal(SIGWINCH, resize);
+    set_signal(SIGTSTP, suspend);
 
     set_terminal();
 
