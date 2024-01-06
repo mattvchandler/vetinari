@@ -17,7 +17,9 @@
 #include <termios.h>
 #include <unistd.h>
 
-#ifdef PULSEAUDIO_FOUND
+#ifdef TERMUX_VIBRATE
+#include <list>
+#elif defined(PULSEAUDIO_FOUND)
 #include <pulse/simple.h>
 #include <pulse/error.h>
 #include "ticktock.h"
@@ -139,7 +141,7 @@ void draw()
     // we have a cols x rows grid of chars
     // each char can be divided into quadrants, where
     // each quadrant is a 1x2 pixel
-    // using quad with as our unit, we have 2*cols x 4*rows grid
+    // using quad witdh as our unit, we have 2*cols x 4*rows grid
 
     int width  = term_info.cols * 2;
     int height = term_info.rows * 4;
@@ -239,7 +241,62 @@ void draw()
     term_info.resized = false;
 }
 
-#ifdef PULSEAUDIO_FOUND
+#ifdef TERMUX_VIBRATE
+// cpp silliness follows
+#define STRX(x) #x
+#define STR(x) STRX(x)
+#define TERMUX_VIBRATE_EXE STR(TERMUX_VIBRATE)
+class Audio
+{
+public:
+    ~Audio()
+    {
+        for(auto && t: thread_pool)
+            t.join();
+    }
+    void tick()
+    {
+        cleanup();
+        if(!errored)
+            thread_pool.emplace_back(&Audio::vibrate, this, true);
+    }
+    void tock()
+    {
+        cleanup();
+        if(!errored)
+            thread_pool.emplace_back(&Audio::vibrate, this, false);
+    }
+private:
+
+    void vibrate(bool tick)
+    {
+        std::this_thread::sleep_for(sleep_delay);
+        if(!errored)
+        {
+            auto cmd = tick ? TERMUX_VIBRATE_EXE " -fd 50" : TERMUX_VIBRATE_EXE " -fd 100";
+            if(std::system(cmd) != 0)
+                errored = true;
+        }
+    }
+
+    // it takes a while for the os to launch and execute the termux-vibrate command, so add a delay to catch the next tick/tock
+    // it won't line up with the random offsets, but maybe we'll just say that adds to the wrongness of the clock
+    std::chrono::milliseconds sleep_delay{std::chrono::milliseconds{400}};
+
+    std::atomic<bool> errored {false};
+    std::list<std::thread> thread_pool;
+
+    void cleanup()
+    {
+        while(thread_pool.front().joinable())
+        {
+            thread_pool.front().join();
+            thread_pool.erase(std::begin(thread_pool));
+        }
+    }
+
+};
+#elif defined(PULSEAUDIO_FOUND)
 class Audio
 {
 public:

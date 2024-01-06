@@ -22,7 +22,12 @@ pkg_check_modules(PULSEAUDIO libpulse-simple)
 
 add_executable(vetinari vetinari.cpp)
 
-if(PULSEAUDIO_FOUND)
+option(TERMUX_VIBRATE "use the termux-vibrate command if your phone's speaker is broken" OFF)
+find_program(TERMUX_VIBRATE_FOUND "termux-vibrate")
+
+if(TERMUX_VIBRATE AND TERMUX_VIBRATE_FOUND)
+    target_compile_definitions(vetinari PRIVATE TERMUX_VIBRATE=${TERMUX_VIBRATE_FOUND})
+elseif(PULSEAUDIO_FOUND)
     target_compile_definitions(vetinari PRIVATE "-DPULSEAUDIO_FOUND")
     target_include_directories(vetinari PRIVATE ${PULSEAUDIO_INCLUDE_DIRS})
     target_link_libraries(vetinari ${PULSEAUDIO_LIBRARIES})
