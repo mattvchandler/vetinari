@@ -187,9 +187,9 @@ void draw()
     auto min  = clock->tm_min;
     auto sec  = clock->tm_sec;
 
-    auto hour_angle = M_PI / 180.0f * (hour * 30.0f + min / 10.0f + sec / 600.0f);
-    auto min_angle  = M_PI / 180.0f * (min  *  6.0f + sec / 10.0f);
-    auto sec_angle  = M_PI / 180.0f * (sec  *  6.0f);
+    auto hour_angle = M_PI / 180.0f * ((static_cast<float>(hour) + min / 60.0f + sec / 3600.0f) * 30.0f);
+    auto min_angle  = M_PI / 180.0f * ((static_cast<float>(min)  + sec / 60.0f)                 *  6.0f);
+    auto sec_angle  = M_PI / 180.0f *  (static_cast<float>(sec)  *  6.0f);
 
     auto hour_len = radius * 0.50f;
     auto min_len  = radius * 0.75f;
